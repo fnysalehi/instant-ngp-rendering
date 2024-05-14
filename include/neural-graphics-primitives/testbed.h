@@ -19,12 +19,15 @@
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/discrete_distribution.h>
 #include <neural-graphics-primitives/nerf.h>
+#include <neural-graphics-primitives/mesh.h>
 #include <neural-graphics-primitives/nerf_loader.h>
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/sdf.h>
+#include <neural-graphics-primitives/geometry.h>
 #include <neural-graphics-primitives/shared_queue.h>
 #include <neural-graphics-primitives/thread_pool.h>
 #include <neural-graphics-primitives/trainable_buffer.cuh>
+#include <neural-graphics-primitives/geometry_bvh.cuh>
 
 #ifdef NGP_GUI
 #  include <neural-graphics-primitives/openxr_hmd.h>
@@ -35,10 +38,10 @@
 
 #include <json/json.hpp>
 
-#ifdef NGP_PYTHON
-#  include <pybind11/pybind11.h>
-#  include <pybind11/numpy.h>
-#endif
+// #ifdef NGP_PYTHON
+// #  include <pybind11/pybind11.h>
+// #  include <pybind11/numpy.h>
+// #endif
 
 #include <thread>
 
@@ -60,6 +63,7 @@ class TriangleOctree;
 class TriangleBvh;
 struct Triangle;
 class GLTexture;
+class Geometrybvh;
 
 class Testbed {
 public:
@@ -69,6 +73,7 @@ public:
 	Testbed(ETestbedMode mode, const fs::path& data_path) : Testbed(mode) { load_training_data(data_path); }
 	Testbed(ETestbedMode mode, const fs::path& data_path, const fs::path& network_config_path) : Testbed(mode, data_path) { reload_network_from_file(network_config_path); }
 	Testbed(ETestbedMode mode, const fs::path& data_path, const nlohmann::json& network_config) : Testbed(mode, data_path) { reload_network_from_json(network_config); }
+
 
 	bool clear_tmp_dir();
 	void update_imgui_paths();
@@ -139,6 +144,67 @@ public:
 
 		GPUMemoryArena::Allocation m_scratch_alloc;
 	};
+
+	class MyTracer {
+	public:
+		MyTracer() {}
+
+		void init_rays_from_camera(
+			uint32_t spp,
+			const ivec2& resolution,
+			const vec2& focal_length,
+			const mat4x3& camera_matrix,
+			const vec2& screen_center,
+			const vec3& parallax_shift,
+			bool snap_to_pixel_centers,
+			const BoundingBox& aabb,
+			float floor_y,
+			float near_distance,
+			float plane_z,
+			float aperture_size,
+			const Foveation& foveation,
+			const Buffer2DView<const vec4>& envmap,
+			vec4* frame_buffer,
+			float* depth_buffer,
+			const Buffer2DView<const uint8_t>& hidden_area_mask,
+			const TriangleOctree* octree,
+			uint32_t n_octree_levels,
+			cudaStream_t stream
+		);
+
+		void init_rays_from_data(uint32_t n_elements, const RaysSdfSoa& data, cudaStream_t stream);
+		uint32_t trace_bvh(TriangleBvh* bvh, const Triangle* triangles, cudaStream_t stream);
+		uint32_t trace(
+			const distance_fun_t& distance_function,
+			float zero_offset,
+			float distance_scale,
+			float maximum_distance,
+			const BoundingBox& aabb,
+			const float floor_y,
+			const TriangleOctree* octree,
+			uint32_t n_octree_levels,
+			cudaStream_t stream
+		);
+		void enlarge(size_t n_elements, cudaStream_t stream);
+		RaysMeshSoa& rays_hit() { return m_rays_hit; }
+		RaysMeshSoa& rays_init() { return m_rays[0];	}
+		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
+		void set_trace_shadow_rays(bool val) { m_trace_shadow_rays = val; }
+		void set_shadow_sharpness(float val) { m_shadow_sharpness = val; }
+	private:
+		RaysMeshSoa m_rays[2];
+		RaysMeshSoa m_rays_hit;
+		uint32_t* m_hit_counter;
+		uint32_t* m_alive_counter;
+
+		uint32_t m_n_rays_initialized = 0;
+		float m_shadow_sharpness = 2048.f;
+		bool m_trace_shadow_rays = false;
+
+		GPUMemoryArena::Allocation m_scratch_alloc;
+	};
+
+
 
 	class NerfTracer {
 	public:
@@ -276,6 +342,9 @@ public:
 	void training_prep_volume(uint32_t batch_size, cudaStream_t stream) {}
 	void load_volume(const fs::path& data_path);
 
+
+	void load_scene(const fs::path& data_path);
+
 	class CudaDevice;
 
 	void render_nerf(
@@ -320,7 +389,16 @@ public:
 		const vec2& screen_center,
 		const Foveation& foveation
 	);
-
+	void render_geometry(
+		cudaStream_t stream,
+		CudaDevice& device,
+		const CudaRenderBufferView& render_buffer,
+		const vec2& focal_length,
+		const mat4x3& camera_matrix,
+		const vec2& screen_center,
+		const Foveation& foveation,
+		int visualized_dimension
+	);
 	void render_frame(
 		cudaStream_t stream,
 		const mat4x3& camera_matrix0,
@@ -358,6 +436,8 @@ public:
 		bool to_srgb = true
 	);
 	void visualize_nerf_cameras(ImDrawList* list, const mat4& world2proj);
+	void visualize_intersected_rays(ImDrawList* list, const mat4& world2proj);
+	
 	fs::path find_network_config(const fs::path& network_config_path);
 	nlohmann::json load_network_config(std::istream& stream, bool is_compressed);
 	nlohmann::json load_network_config(const fs::path& network_config_path);
@@ -405,19 +485,7 @@ public:
 	void update_density_grid_mean_and_bitfield(cudaStream_t stream);
 	void mark_density_grid_in_sphere_empty(const vec3& pos, float radius, cudaStream_t stream);
 
-	struct NerfCounters {
-		GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
-		GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
-		GPUMemory<float> loss;
-
-		uint32_t rays_per_batch = 1<<12;
-		uint32_t n_rays_total = 0;
-		uint32_t measured_batch_size = 0;
-		uint32_t measured_batch_size_before_compaction = 0;
-
-		void prepare_for_training_steps(cudaStream_t stream);
-		float update_after_training(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
-	};
+	
 
 	void train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void train_nerf_step(uint32_t target_batch_size, NerfCounters& counters, cudaStream_t stream);
@@ -634,146 +702,7 @@ public:
 
 	bool m_gui_redraw = true;
 
-	struct Nerf {
-		struct Training {
-			NerfDataset dataset;
-			int n_images_for_training = 0; // how many images to train from, as a high watermark compared to the dataset size
-			int n_images_for_training_prev = 0; // how many images we saw last time we updated the density grid
-
-			struct ErrorMap {
-				GPUMemory<float> data;
-				GPUMemory<float> cdf_x_cond_y;
-				GPUMemory<float> cdf_y;
-				GPUMemory<float> cdf_img;
-				std::vector<float> pmf_img_cpu;
-				ivec2 resolution = {16, 16};
-				ivec2 cdf_resolution = {16, 16};
-				bool is_cdf_valid = false;
-			} error_map;
-
-			std::vector<TrainingXForm> transforms;
-			GPUMemory<TrainingXForm> transforms_gpu;
-
-			std::vector<vec3> cam_pos_gradient;
-			GPUMemory<vec3> cam_pos_gradient_gpu;
-
-			std::vector<vec3> cam_rot_gradient;
-			GPUMemory<vec3> cam_rot_gradient_gpu;
-
-			GPUMemory<vec3> cam_exposure_gpu;
-			std::vector<vec3> cam_exposure_gradient;
-			GPUMemory<vec3> cam_exposure_gradient_gpu;
-
-			vec2 cam_focal_length_gradient = vec2(0.0f);
-			GPUMemory<vec2> cam_focal_length_gradient_gpu;
-
-			std::vector<AdamOptimizer<vec3>> cam_exposure;
-			std::vector<AdamOptimizer<vec3>> cam_pos_offset;
-			std::vector<RotationAdamOptimizer> cam_rot_offset;
-			AdamOptimizer<vec2> cam_focal_length_offset = AdamOptimizer<vec2>(0.0f);
-
-			GPUMemory<float> extra_dims_gpu; // if the model demands a latent code per training image, we put them in here.
-			GPUMemory<float> extra_dims_gradient_gpu;
-			std::vector<VarAdamOptimizer> extra_dims_opt;
-
-			std::vector<float> get_extra_dims_cpu(int trainview) const;
-
-			float extrinsic_l2_reg = 1e-4f;
-			float extrinsic_learning_rate = 1e-3f;
-
-			float intrinsic_l2_reg = 1e-4f;
-			float exposure_l2_reg = 0.0f;
-
-			NerfCounters counters_rgb;
-
-			bool random_bg_color = true;
-			bool linear_colors = false;
-			ELossType loss_type = ELossType::L2;
-			ELossType depth_loss_type = ELossType::L1;
-			bool snap_to_pixel_centers = true;
-			bool train_envmap = false;
-
-			bool optimize_distortion = false;
-			bool optimize_extrinsics = false;
-			bool optimize_extra_dims = false;
-			bool optimize_focal_length = false;
-			bool optimize_exposure = false;
-			bool render_error_overlay = false;
-			float error_overlay_brightness = 0.125f;
-			uint32_t n_steps_between_cam_updates = 16;
-			uint32_t n_steps_since_cam_update = 0;
-
-			bool sample_focal_plane_proportional_to_error = false;
-			bool sample_image_proportional_to_error = false;
-			bool include_sharpness_in_error = false;
-			uint32_t n_steps_between_error_map_updates = 128;
-			uint32_t n_steps_since_error_map_update = 0;
-			uint32_t n_rays_since_error_map_update = 0;
-
-			float near_distance = 0.1f;
-			float density_grid_decay = 0.95f;
-			default_rng_t density_grid_rng;
-			int view = 0;
-
-			float depth_supervision_lambda = 0.f;
-
-			GPUMemory<float> sharpness_grid;
-
-			void set_camera_intrinsics(int frame_idx, float fx, float fy = 0.0f, float cx = -0.5f, float cy = -0.5f, float k1 = 0.0f, float k2 = 0.0f, float p1 = 0.0f, float p2 = 0.0f, float k3 = 0.0f, float k4 = 0.0f, bool is_fisheye = false);
-			void set_camera_extrinsics_rolling_shutter(int frame_idx, mat4x3 camera_to_world_start, mat4x3 camera_to_world_end, const vec4& rolling_shutter, bool convert_to_ngp = true);
-			void set_camera_extrinsics(int frame_idx, mat4x3 camera_to_world, bool convert_to_ngp = true);
-			mat4x3 get_camera_extrinsics(int frame_idx);
-			void update_transforms(int first = 0, int last = -1);
-			void update_extra_dims();
-
-#ifdef NGP_PYTHON
-			void set_image(int frame_idx, pybind11::array_t<float> img, pybind11::array_t<float> depth_img, float depth_scale);
-#endif
-
-			void reset_camera_extrinsics();
-			void export_camera_extrinsics(const fs::path& path, bool export_extrinsics_in_quat_format = true);
-		} training = {};
-
-		GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
-		GPUMemory<uint8_t> density_grid_bitfield;
-		uint8_t* get_density_grid_bitfield_mip(uint32_t mip);
-		GPUMemory<float> density_grid_mean;
-		uint32_t density_grid_ema_step = 0;
-
-		uint32_t max_cascade = 0;
-
-		ENerfActivation rgb_activation = ENerfActivation::Exponential;
-		ENerfActivation density_activation = ENerfActivation::Exponential;
-
-		vec3 light_dir = vec3(0.5f);
-		// which training image's latent code should be used for rendering
-		int rendering_extra_dims_from_training_view = 0;
-		GPUMemory<float> rendering_extra_dims;
-
-		void reset_extra_dims(default_rng_t &rng);
-		const float* get_rendering_extra_dims(cudaStream_t stream) const;
-
-		int show_accel = -1;
-
-		float sharpen = 0.f;
-
-		float cone_angle_constant = 1.f/256.f;
-
-		bool visualize_cameras = false;
-		bool render_with_lens_distortion = false;
-		Lens render_lens = {};
-
-		float render_min_transmittance = 0.01f;
-		bool render_gbuffer_hard_edges = false;
-
-		float glow_y_cutoff = 0.f;
-		int glow_mode = 0;
-
-		int find_closest_training_view(mat4x3 pose) const;
-		void set_rendering_extra_dims_from_training_view(int trainview);
-		void set_rendering_extra_dims(const std::vector<float>& vals);
-		std::vector<float> get_rendering_extra_dims_cpu() const;
-	} m_nerf;
+	Nerf m_nerf;
 
 	struct Sdf {
 		float shadow_sharpness = 2048.0f;
@@ -828,6 +757,12 @@ public:
 			GPUMemory<vec3> perturbations;
 		} training = {};
 	} m_sdf;
+
+
+	struct Geometry {
+	    std::shared_ptr<GeometryBvh> geometry_bvh; // unique_ptr
+		std::vector<GeometryBvhNode> bvh_nodes;
+	} m_geometry;
 
 	enum EDataType {
 		Float,
@@ -895,9 +830,10 @@ public:
 	float m_slice_plane_z = 0.0f;
 	bool m_floor_enable = false;
 	inline float get_floor_y() const { return m_floor_enable ? m_aabb.min.y + 0.001f : -10000.f; }
-	BoundingBox m_raw_aabb;
-	BoundingBox m_aabb;
-	BoundingBox m_render_aabb;
+	// not sure about the value
+	BoundingBox m_raw_aabb = BoundingBox{vec3(-10.0f), vec3(10.0f)};;
+	BoundingBox m_aabb = BoundingBox{vec3(-10.0f), vec3(10.0f)};;
+	BoundingBox m_render_aabb = BoundingBox{vec3(-10.0f), vec3(10.0f)};;
 	mat3 m_render_aabb_to_local = mat3::identity();
 
 	mat4x3 crop_box(bool nerf_space) const;

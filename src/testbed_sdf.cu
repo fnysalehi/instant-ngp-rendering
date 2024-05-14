@@ -403,6 +403,7 @@ __global__ void compact_kernel_shadow_sdf(
 	}
 }
 
+// separates the "alive" and "dead" elements of the input arrays into two separate arrays
 __global__ void compact_kernel_sdf(
 	const uint32_t n_elements,
 	const float zero_offset,
@@ -795,6 +796,7 @@ uint32_t Testbed::SphereTracer::trace(
 	return n_hit;
 }
 
+// allocate and distribute workspace memory for rays
 void Testbed::SphereTracer::enlarge(size_t n_elements, cudaStream_t stream) {
 	n_elements = next_multiple(n_elements, size_t(BATCH_SIZE_GRANULARITY));
 	auto scratch = allocate_workspace_and_distribute<

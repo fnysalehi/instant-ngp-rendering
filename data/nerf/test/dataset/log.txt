@@ -1,0 +1,22 @@
+{
+    "BlenderNeRF Version": "5.0.0",
+    "Date and Time": "25/03/2024 13:18:17",
+    "Train": true,
+    "Test": false,
+    "AABB": 4,
+    "Render Frames": true,
+    "File Format": "NGP",
+    "Save Path": "/home/fsalehi/instant-ngp/data/nerf/test/",
+    "Method": "COS",
+    "Camera": "BlenderNeRF Camera",
+    "Location": "[-0.004242527298629284, -0.0206960029900074, -0.003797367215156555]",
+    "Rotation": "[0.0, 0.0, 0.0]",
+    "Scale": "[0.9866324663162231, 0.9866324663162231, 0.9866324663162231]",
+    "Radius": 4.019999980926514,
+    "Lens": "49.61000061035156 mm",
+    "Seed": 0,
+    "Frames": 50,
+    "Upper Views": true,
+    "Outwards": false,
+    "Dataset Name": "dataset"
+}

@@ -142,6 +142,7 @@ void Testbed::load_training_data(const fs::path& path) {
 		case ETestbedMode::Sdf:    load_mesh(path); break;
 		case ETestbedMode::Image:  load_image(path); break;
 		case ETestbedMode::Volume: load_volume(path); break;
+		// case ETestbedMode::Geometry: load_scene(path); break;
 		default: throw std::runtime_error{"Invalid testbed mode."};
 	}
 
@@ -172,6 +173,7 @@ void Testbed::set_mode(ETestbedMode mode) {
 	m_nerf = {};
 	m_sdf = {};
 	m_volume = {};
+	m_geometry = {};
 
 	// Kill training-related things
 	m_encoding = {};
@@ -352,6 +354,11 @@ void Testbed::load_file(const fs::path& path) {
 			load_camera_path(path);
 			return;
 		}
+	}
+
+	if (equals_case_insensitive(path.extension(), "obj")) {
+		load_mesh(path);
+		return;
 	}
 
 	// If the dragged file isn't any of the above, assume that it's training data
@@ -1763,6 +1770,15 @@ void Testbed::visualize_nerf_cameras(ImDrawList* list, const mat4& world2proj) {
 
 }
 
+void Testbed::visualize_intersected_rays(ImDrawList* list, const mat4& world2proj) {
+	for (const auto& ray : m_geometry.geometry_bvh->getIntersectedRays()) {
+        vec3 origin = ray.first;
+        vec3 endPoint = ray.second;
+
+        add_debug_line(list, world2proj, origin, endPoint, 0xffffffff);
+    }
+}
+
 void Testbed::draw_visualizations(ImDrawList* list, const mat4x3& camera_matrix) {
 	mat4 view2world = camera_matrix;
 	mat4 world2view = inverse(view2world);
@@ -1788,6 +1804,10 @@ void Testbed::draw_visualizations(ImDrawList* list, const mat4x3& camera_matrix)
 			visualize_nerf_cameras(list, world2proj);
 		}
 	}
+
+	if (m_testbed_mode == ETestbedMode::Geometry) {
+        visualize_intersected_rays(list, world2proj);
+    }
 
 	if (m_visualize_unit_cube) {
 		visualize_cube(list, world2proj, vec3(0.f), vec3(1.f), mat3::identity());
@@ -4420,6 +4440,9 @@ void Testbed::render_frame_main(
 		case ETestbedMode::Volume:
 			render_volume(device.stream(), device.render_buffer_view(), focal_length, camera_matrix0, screen_center, foveation);
 			break;
+		// case ETestbedMode::Geometry:
+		// 	render_geometry(device.stream(), device, device.render_buffer_view(), focal_length, camera_matrix0, screen_center, foveation, visualized_dimension);
+		// 	break;
 		default:
 			// No-op if no mode is active
 			break;

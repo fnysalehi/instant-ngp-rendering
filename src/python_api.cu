@@ -14,6 +14,7 @@
 
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/testbed.h>
+#include <neural-graphics-primitives/nerf.h>
 #include <neural-graphics-primitives/thread_pool.h>
 
 #include <json/json.hpp>
@@ -42,7 +43,7 @@ namespace py = pybind11;
 
 namespace ngp {
 
-void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> img, pybind11::array_t<float> depth_img, float depth_scale) {
+void Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> img, pybind11::array_t<float> depth_img, float depth_scale) {
 	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
 		throw std::runtime_error{"Invalid frame index"};
 	}
@@ -574,29 +575,29 @@ PYBIND11_MODULE(pyngp, m) {
 		})
 		;
 
-	py::class_<Testbed::Nerf> nerf(testbed, "Nerf");
+	py::class_<Nerf> nerf(testbed, "Nerf");
 	nerf
-		.def_readonly("training", &Testbed::Nerf::training)
-		.def_readwrite("rgb_activation", &Testbed::Nerf::rgb_activation)
-		.def_readwrite("density_activation", &Testbed::Nerf::density_activation)
-		.def_readwrite("sharpen", &Testbed::Nerf::sharpen)
+		.def_readonly("training", &Nerf::training)
+		.def_readwrite("rgb_activation", &Nerf::rgb_activation)
+		.def_readwrite("density_activation", &Nerf::density_activation)
+		.def_readwrite("sharpen", &Nerf::sharpen)
 		// Legacy member: lens used to be called "camera_distortion"
-		.def_readwrite("render_with_camera_distortion", &Testbed::Nerf::render_with_lens_distortion)
-		.def_readwrite("render_with_lens_distortion", &Testbed::Nerf::render_with_lens_distortion)
-		.def_readwrite("render_distortion", &Testbed::Nerf::render_lens)
-		.def_readwrite("render_lens", &Testbed::Nerf::render_lens)
-		.def_readwrite("rendering_min_transmittance", &Testbed::Nerf::render_min_transmittance)
-		.def_readwrite("render_min_transmittance", &Testbed::Nerf::render_min_transmittance)
-		.def_readwrite("cone_angle_constant", &Testbed::Nerf::cone_angle_constant)
-		.def_readwrite("visualize_cameras", &Testbed::Nerf::visualize_cameras)
-		.def_readwrite("glow_y_cutoff", &Testbed::Nerf::glow_y_cutoff)
-		.def_readwrite("glow_mode", &Testbed::Nerf::glow_mode)
-		.def_readwrite("render_gbuffer_hard_edges", &Testbed::Nerf::render_gbuffer_hard_edges)
-		.def_readwrite("rendering_extra_dims_from_training_view", &Testbed::Nerf::rendering_extra_dims_from_training_view, "If non-negative, indicates the training view from which the extra dims are used. If -1, uses the values previously set by `set_rendering_extra_dims`.")
-		.def("find_closest_training_view", &Testbed::Nerf::find_closest_training_view, "Obtain the training view that is closest to the current camera.")
-		.def("set_rendering_extra_dims_from_training_view", &Testbed::Nerf::set_rendering_extra_dims_from_training_view, "Set the extra dims that are used for rendering to those that were trained for a given training view.")
-		.def("set_rendering_extra_dims", &Testbed::Nerf::set_rendering_extra_dims, "Set the extra dims that are used for rendering.")
-		.def("get_rendering_extra_dims", &Testbed::Nerf::get_rendering_extra_dims_cpu, "Get the extra dims that are currently used for rendering.")
+		.def_readwrite("render_with_camera_distortion", &Nerf::render_with_lens_distortion)
+		.def_readwrite("render_with_lens_distortion", &Nerf::render_with_lens_distortion)
+		.def_readwrite("render_distortion", &Nerf::render_lens)
+		.def_readwrite("render_lens", &Nerf::render_lens)
+		.def_readwrite("rendering_min_transmittance", &Nerf::render_min_transmittance)
+		.def_readwrite("render_min_transmittance", &Nerf::render_min_transmittance)
+		.def_readwrite("cone_angle_constant", &Nerf::cone_angle_constant)
+		.def_readwrite("visualize_cameras", &Nerf::visualize_cameras)
+		.def_readwrite("glow_y_cutoff", &Nerf::glow_y_cutoff)
+		.def_readwrite("glow_mode", &Nerf::glow_mode)
+		.def_readwrite("render_gbuffer_hard_edges", &Nerf::render_gbuffer_hard_edges)
+		.def_readwrite("rendering_extra_dims_from_training_view", &Nerf::rendering_extra_dims_from_training_view, "If non-negative, indicates the training view from which the extra dims are used. If -1, uses the values previously set by `set_rendering_extra_dims`.")
+		.def("find_closest_training_view", &Nerf::find_closest_training_view, "Obtain the training view that is closest to the current camera.")
+		.def("set_rendering_extra_dims_from_training_view", &Nerf::set_rendering_extra_dims_from_training_view, "Set the extra dims that are used for rendering to those that were trained for a given training view.")
+		.def("set_rendering_extra_dims", &Nerf::set_rendering_extra_dims, "Set the extra dims that are used for rendering.")
+		.def("get_rendering_extra_dims", &Nerf::get_rendering_extra_dims_cpu, "Get the extra dims that are currently used for rendering.")
 		;
 
 	py::class_<BRDFParams> brdfparams(m, "BRDFParams");
@@ -641,35 +642,35 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readonly("is_hdr", &NerfDataset::is_hdr)
 		;
 
-	py::class_<Testbed::Nerf::Training>(nerf, "Training")
-		.def_readwrite("random_bg_color", &Testbed::Nerf::Training::random_bg_color)
-		.def_readwrite("n_images_for_training", &Testbed::Nerf::Training::n_images_for_training)
-		.def_readwrite("linear_colors", &Testbed::Nerf::Training::linear_colors)
-		.def_readwrite("loss_type", &Testbed::Nerf::Training::loss_type)
-		.def_readwrite("depth_loss_type", &Testbed::Nerf::Training::depth_loss_type)
-		.def_readwrite("snap_to_pixel_centers", &Testbed::Nerf::Training::snap_to_pixel_centers)
-		.def_readwrite("optimize_extrinsics", &Testbed::Nerf::Training::optimize_extrinsics)
-		.def_readwrite("optimize_per_image_latents", &Testbed::Nerf::Training::optimize_extra_dims)
-		.def_readwrite("optimize_extra_dims", &Testbed::Nerf::Training::optimize_extra_dims)
-		.def_readwrite("optimize_exposure", &Testbed::Nerf::Training::optimize_exposure)
-		.def_readwrite("optimize_distortion", &Testbed::Nerf::Training::optimize_distortion)
-		.def_readwrite("optimize_focal_length", &Testbed::Nerf::Training::optimize_focal_length)
-		.def_readwrite("n_steps_between_cam_updates", &Testbed::Nerf::Training::n_steps_between_cam_updates)
-		.def_readwrite("sample_focal_plane_proportional_to_error", &Testbed::Nerf::Training::sample_focal_plane_proportional_to_error)
-		.def_readwrite("sample_image_proportional_to_error", &Testbed::Nerf::Training::sample_image_proportional_to_error)
-		.def_readwrite("include_sharpness_in_error", &Testbed::Nerf::Training::include_sharpness_in_error)
-		.def_readonly("transforms", &Testbed::Nerf::Training::transforms)
-		//.def_readonly("focal_lengths", &Testbed::Nerf::Training::focal_lengths) // use training.dataset.metadata instead
-		.def_readwrite("near_distance", &Testbed::Nerf::Training::near_distance)
-		.def_readwrite("density_grid_decay", &Testbed::Nerf::Training::density_grid_decay)
-		.def_readwrite("extrinsic_l2_reg", &Testbed::Nerf::Training::extrinsic_l2_reg)
-		.def_readwrite("extrinsic_learning_rate", &Testbed::Nerf::Training::extrinsic_learning_rate)
-		.def_readwrite("intrinsic_l2_reg", &Testbed::Nerf::Training::intrinsic_l2_reg)
-		.def_readwrite("exposure_l2_reg", &Testbed::Nerf::Training::exposure_l2_reg)
-		.def_readwrite("depth_supervision_lambda", &Testbed::Nerf::Training::depth_supervision_lambda)
-		.def_readonly("dataset", &Testbed::Nerf::Training::dataset)
-		.def("get_extra_dims", &Testbed::Nerf::Training::get_extra_dims_cpu, "Get the extra dims (including trained latent code) for a specified training view.")
-		.def("set_camera_intrinsics", &Testbed::Nerf::Training::set_camera_intrinsics,
+	py::class_<Nerf::Training>(nerf, "Training")
+		.def_readwrite("random_bg_color", &Nerf::Training::random_bg_color)
+		.def_readwrite("n_images_for_training", &Nerf::Training::n_images_for_training)
+		.def_readwrite("linear_colors", &Nerf::Training::linear_colors)
+		.def_readwrite("loss_type", &Nerf::Training::loss_type)
+		.def_readwrite("depth_loss_type", &Nerf::Training::depth_loss_type)
+		.def_readwrite("snap_to_pixel_centers", &Nerf::Training::snap_to_pixel_centers)
+		.def_readwrite("optimize_extrinsics", &Nerf::Training::optimize_extrinsics)
+		.def_readwrite("optimize_per_image_latents", &Nerf::Training::optimize_extra_dims)
+		.def_readwrite("optimize_extra_dims", &Nerf::Training::optimize_extra_dims)
+		.def_readwrite("optimize_exposure", &Nerf::Training::optimize_exposure)
+		.def_readwrite("optimize_distortion", &Nerf::Training::optimize_distortion)
+		.def_readwrite("optimize_focal_length", &Nerf::Training::optimize_focal_length)
+		.def_readwrite("n_steps_between_cam_updates", &Nerf::Training::n_steps_between_cam_updates)
+		.def_readwrite("sample_focal_plane_proportional_to_error", &Nerf::Training::sample_focal_plane_proportional_to_error)
+		.def_readwrite("sample_image_proportional_to_error", &Nerf::Training::sample_image_proportional_to_error)
+		.def_readwrite("include_sharpness_in_error", &Nerf::Training::include_sharpness_in_error)
+		.def_readonly("transforms", &Nerf::Training::transforms)
+		//.def_readonly("focal_lengths", &Nerf::Training::focal_lengths) // use training.dataset.metadata instead
+		.def_readwrite("near_distance", &Nerf::Training::near_distance)
+		.def_readwrite("density_grid_decay", &Nerf::Training::density_grid_decay)
+		.def_readwrite("extrinsic_l2_reg", &Nerf::Training::extrinsic_l2_reg)
+		.def_readwrite("extrinsic_learning_rate", &Nerf::Training::extrinsic_learning_rate)
+		.def_readwrite("intrinsic_l2_reg", &Nerf::Training::intrinsic_l2_reg)
+		.def_readwrite("exposure_l2_reg", &Nerf::Training::exposure_l2_reg)
+		.def_readwrite("depth_supervision_lambda", &Nerf::Training::depth_supervision_lambda)
+		.def_readonly("dataset", &Nerf::Training::dataset)
+		.def("get_extra_dims", &Nerf::Training::get_extra_dims_cpu, "Get the extra dims (including trained latent code) for a specified training view.")
+		.def("set_camera_intrinsics", &Nerf::Training::set_camera_intrinsics,
 			py::arg("frame_idx"),
 			py::arg("fx")=0.f, py::arg("fy")=0.f,
 			py::arg("cx")=-0.5f, py::arg("cy")=-0.5f,
@@ -679,14 +680,14 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("is_fisheye")=false,
 			"Set up the camera intrinsics for the given training image index."
 		)
-		.def("set_camera_extrinsics", &Testbed::Nerf::Training::set_camera_extrinsics,
+		.def("set_camera_extrinsics", &Nerf::Training::set_camera_extrinsics,
 			py::arg("frame_idx"),
 			py::arg("camera_to_world"),
 			py::arg("convert_to_ngp")=true,
 			"Set up the camera extrinsics for the given training image index, from the given 3x4 transformation matrix."
 		)
-		.def("get_camera_extrinsics", &Testbed::Nerf::Training::get_camera_extrinsics, py::arg("frame_idx"), "return the 3x4 transformation matrix of given training frame")
-		.def("set_image", &Testbed::Nerf::Training::set_image,
+		.def("get_camera_extrinsics", &Nerf::Training::get_camera_extrinsics, py::arg("frame_idx"), "return the 3x4 transformation matrix of given training frame")
+		.def("set_image", &Nerf::Training::set_image,
 			py::arg("frame_idx"),
 			py::arg("img"),
 			py::arg("depth_img"),

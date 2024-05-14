@@ -273,8 +273,10 @@ public:
 			int idx = query_stack.pop();
 
 			const TriangleBvhNode& node = bvhnodes[idx];
-
+			// checks if it's a leaf node
 			if (node.left_idx < 0) {
+
+				// checks each triangle in the leaf node for intersection with the ray, updating mint and shortest_idx if a closer intersection is found
 				int end = -node.right_idx-1;
 				for (int i = -node.left_idx-1; i < end; ++i) {
 					float t = triangles[i].ray_intersect(ro, rd);
@@ -283,7 +285,9 @@ public:
 						shortest_idx = i;
 					}
 				}
-			} else {
+			} 
+			// calculates the intersection of the ray with the bounding boxes of the node's children and sorts them by distance
+			else {
 				DistAndIdx children[BRANCHING_FACTOR];
 
 				uint32_t first_child = node.left_idx;
@@ -295,6 +299,7 @@ public:
 
 				sorting_network<BRANCHING_FACTOR>(children);
 
+				// pushes the indices ofchildren with the closest bounding boxes (intersect with the ray) to the query stack
 				NGP_PRAGMA_UNROLL
 				for (uint32_t i = 0; i < BRANCHING_FACTOR; ++i) {
 					if (children[i].dist < mint) {
@@ -493,7 +498,11 @@ public:
 	void ray_trace_gpu(uint32_t n_elements, vec3* gpu_positions, vec3* gpu_directions, const Triangle* gpu_triangles, cudaStream_t stream) override {
 #ifdef NGP_OPTIX
 		if (m_optix.available) {
-			m_optix.raytrace->invoke({gpu_positions, gpu_directions, gpu_triangles, m_optix.gas->handle()}, {n_elements, 1, 1}, stream);
+			// creating params for raytrace with ray_origins, ray_directions, and triangles and OptixTraversableHandle geometry
+			// dimensions of the launch grid
+			// first copied from host memory to device memory
+			// second Optix kernel is launched 
+			m_optix.raytrace->invoke({gpu_positions, gpu_directions, gpu_triangles, m_optix.gas->handle()}, {n_elements, 1, 1}, stream);	
 		} else
 #endif //NGP_OPTIX
 		{
@@ -706,15 +715,20 @@ __global__ void unsigned_distance_kernel(uint32_t n_elements,
 }
 
 __global__ void raytrace_kernel(uint32_t n_elements, vec3* __restrict__ positions, vec3* __restrict__ directions, const TriangleBvhNode* __restrict__ nodes, const Triangle* __restrict__ triangles) {
-	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;	//index i of the current thread.
 	if (i >= n_elements) return;
 
 	auto pos = positions[i];
 	auto dir = directions[i];
 
 	auto p = TriangleBvh4::ray_intersect(pos, dir, nodes, triangles);
+	// first element is the index of the intersected triangle and the second element is the distance to the intersection.
+	
+	// new positions = intersection points
 	positions[i] = pos + p.second * dir;
 
+	// if a triangle was hit, p.first is its index and it updates the direction of the ray to the normal of the intersected triangle, 
+	// otherwise p.first is -1.
 	if (p.first >= 0) {
 		directions[i] = triangles[p.first].normal();
 	}
