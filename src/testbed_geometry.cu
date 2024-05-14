@@ -1147,7 +1147,6 @@ GeometryBvhNode Testbed::load_mesh(const fs::path& data_path, vec3 center) {
 	GeometryBvhNode mesh_node;
     mesh_node.type = NodeType::MESH;
 
-
 	tlog::info() << "Loading mesh from '" << data_path << "'";
 	auto start = std::chrono::steady_clock::now();
 
@@ -1165,17 +1164,10 @@ GeometryBvhNode Testbed::load_mesh(const fs::path& data_path, vec3 center) {
 	size_t n_vertices = vertices.size();
 	size_t n_triangles = n_vertices/3;
 
-	// Compute the AABB of the raw mesh
-	m_raw_aabb.min = vec3(std::numeric_limits<float>::infinity());
-	m_raw_aabb.max = vec3(-std::numeric_limits<float>::infinity());
-	for (size_t i = 0; i < n_vertices; ++i) {
-		m_raw_aabb.enlarge(vertices[i]);
-	}
-
 	// Compute the AABB of the mesh
-	BoundingBox aabb = BoundingBox();
-	aabb.min = vec3(std::numeric_limits<float>::infinity());
-	aabb.max = vec3(-std::numeric_limits<float>::infinity());
+	vec3 inf(std::numeric_limits<float>::infinity());
+	BoundingBox aabb (inf, inf);
+
 	for (size_t i = 0; i < n_vertices; ++i) {
 	    aabb.enlarge(vertices[i]);
 	}
@@ -1188,49 +1180,38 @@ GeometryBvhNode Testbed::load_mesh(const fs::path& data_path, vec3 center) {
 	// Store the center and scale for later use.
 	// I dont think we need center! and maybe scale is not needed as well
 	// if not needed delete from the struct
-	m_meshData.mesh_center = aabb.center;
-	m_meshData.mesh_scale = max(m_raw_aabb.diag());
+	mesh_node.data.mesh.mesh_center = aabb.center;
+	mesh_node.data.mesh.mesh_scale = max(aabb.diag());
 
 	// Normalize vertex coordinates to lie within [0,1]^3.
 	// This way, none of the constants need to carry around
 	// bounding box factors.
 	for (size_t i = 0; i < n_vertices; ++i) {
-		vertices[i] = (vertices[i] - m_raw_aabb.min - 0.5f * m_raw_aabb.diag()) / MeshData.mesh_scale + 0.5f;
+		vertices[i] = (vertices[i] - aabb.min - 0.5f * aabb.diag()) / mesh_node.data.mesh.mesh_scale  + 0.5f;
 	}
 
-	// Compute the AABB of the normalized mesh
-	m_aabb = {};
-	for (size_t i = 0; i < n_vertices; ++i) {
-		m_aabb.enlarge(vertices[i]);
-	}
-
-	m_aabb.inflate(length(m_aabb.diag()) * inflation);
-	m_aabb = m_aabb.intersection(BoundingBox{vec3(0.0f), vec3(1.0f)});
-	m_render_aabb = m_aabb;
-	m_render_aabb_to_local = mat3::identity();
-
-	m_meshData.triangles_cpu.resize(n_triangles);
+	mesh_node.data.mesh.triangles_cpu.resize(n_triangles);
 	for (size_t i = 0; i < n_vertices; i += 3) {
-		m_meshData.triangles_cpu[i/3] = {vertices[i+0], vertices[i+1], vertices[i+2]};
+		mesh_node.data.mesh.triangles_cpu[i/3] = {vertices[i+0], vertices[i+1], vertices[i+2]};
 	}
 
-	if (!m_meshData.triangle_bvh) {
-		m_meshData.triangle_bvh = TriangleBvh::make();
+	if (!mesh_node.data.mesh.triangle_bvh) {
+		mesh_node.data.mesh.triangle_bvh = TriangleBvh::make();
 	}
 
-	m_meshData.triangle_bvh->build(m_meshData.triangles_cpu, 8);
-	m_meshData.triangles_gpu.resize_and_copy_from_host(m_meshData.triangles_cpu);
+	mesh_node.data.mesh.triangle_bvh->build(mesh_node.data.mesh.triangles_cpu, 8);
+	mesh_node.data.mesh.triangles_gpu.resize_and_copy_from_host(mesh_node.data.mesh.triangles_cpu);
 
 	// initializes optix and creates OptiX program raytrace
-	m_meshData.triangle_bvh->build_optix(m_meshData.triangles_gpu, m_stream.get());
+	mesh_node.data.mesh.triangle_bvh->build_optix(mesh_node.data.mesh.triangles_gpu, m_stream.get());
 
-	m_meshData.triangle_octree.reset(new TriangleOctree{});
-	m_meshData.triangle_octree->build(*m_meshData.triangle_bvh, m_meshData.triangles_cpu, 10);
+	mesh_node.data.mesh.triangle_octree.reset(new TriangleOctree{});
+	mesh_node.data.mesh.triangle_octree->build(*mesh_node.data.mesh.triangle_bvh, mesh_node.data.mesh.triangles_cpu, 10);
 
 	m_bounding_radius = length(vec3(0.5f));
 
 	// Compute discrete probability distribution for later sampling of the mesh's surface
-	m_meshData.triangle_weights.resize(n_triangles);
+	mesh_node.data.mesh.triangle_weights.resize(n_triangles);
 	for (size_t i = 0; i < n_triangles; ++i) {
 		triangle_weights.triangle_weights[i] = triangle_weights.triangles_cpu[i].surface_area();
 	}
@@ -1240,7 +1221,7 @@ GeometryBvhNode Testbed::load_mesh(const fs::path& data_path, vec3 center) {
 	triangle_weights.triangle_cdf.resize_and_copy_from_host(triangle_weights.triangle_distribution.cdf);
 
 	// Clear training data as it's no longer representative
-	// of the previously loaded mesh... but don't clear the network.
+	// of the previously loaded mesh.. but don't clear the network.
 	// Perhaps it'll look interesting while morphing from one mesh to another.
 	triangle_weights.training.idx = 0;
 	triangle_weights.training.size = 0;
@@ -1249,25 +1230,28 @@ GeometryBvhNode Testbed::load_mesh(const fs::path& data_path, vec3 center) {
 	tlog::info() << "  n_triangles=" << n_triangles << " aabb=" << m_raw_aabb;
 
 
-	node.bb = m_aabb; // not sure about the correct bounding box
+	node.bb = aabb; // not sure about the correct bounding box
     node.left_idx = -1; // Set to -1 for leaf node
     node.right_idx = -1; // Set to -1 for leaf node
-    node.type = NodeType::Mesh;
-    node.data.mesh = m_meshData;
 
 	return node;
 }
 
-GeometryBvhNode Testbed::load_empty_mesh_node() {
+// should I make a unique pointer and then return it?
+GeometryBvhNode Testbed::load_empty_mesh_node(vec3 center) {
 
     GeometryBvhNode mesh_node;
-    mesh_node.bb = BoundingBox{}; // Assuming BoundingBox has a default constructor
+    mesh_node.type = NodeType::Mesh;
+	mesh_node.data.mesh = MeshData{};
+
+	// init the meshData
+
+    mesh_node.bb = BoundingBox{center, center+vec3(0.5f)};
+
     mesh_node.left_idx = -1; 
     mesh_node.right_idx = -1; 
-    mesh_node.type = NodeType::Mesh;
-    mesh_node.data.nerf = Nerf{}; // Assuming Nerf has a default constructor
 
-    return nerf_node;
+    return mesh_node;
 }
 
 
@@ -1395,7 +1379,26 @@ GeometryBvhNode Testbed::load_empty_nerf_node(vec3 center) {
     return nerf_node;
 }
 
+// future work: add a threadpool to make the loading simultaneous
 void Testbed::load_scene(const fs::path& data_path) {
+
+
+	/**
+	 * [
+    {
+        "center": [0.0, 0.0, 0.0],
+        "path": "path/to/geometry.obj",
+        "type": "Mesh"
+    },
+    {
+        "center": [1.0, 1.0, 1.0],
+        "path": "path/to/geometry.json",
+        "type": "Nerf"
+    }
+    // ... more geometries ...
+	 *]
+	 * 
+	*/
 	if (!data_path.empty()) {
 		if (m_geometry.geometry_bvh) {
 			m_geometry.geometry_bvh.reset();
@@ -1411,26 +1414,40 @@ void Testbed::load_scene(const fs::path& data_path) {
 		if (!file) {
 			throw std::runtime_error{fmt::format("Geometry file '{}' not found", path.str())};
 		}
-        std::string line;
-		
-		std::vector<fs::path> model_paths;
-        while (std::getline(file, line)) {
-            model_paths.push_back(line);
+        
+		nlohmann::json geometries = nlohmann::json::parse(file, nullptr, true, true);
+
+        if (!geometries.is_array()) {
+            throw std::runtime_error{"Geometry file must contain an array of geometry metadata."};
         }
 
-		size_t n_nodes = model_paths.size();
+        size_t n_nodes = geometries.size();
 
 		m_geometry.bvh_nodes.resize(n_nodes);
 
 		for(size_t i = 0; i < n_nodes; ++i) {
-			fs::path model_path = model_paths[i];
-			if (equals_case_insensitive(model_path.extension(), "obj") || equals_case_insensitive(model_path.extension(), "stl")) {
-				m_geometry.bvh_nodes[i] = load_mesh(model_path);
-			} else if (equals_case_insensitive(model_path.extension(), "json")) {
-				m_geometry.bvh_nodes[i] = load_nerf(model_path);
-			} else {
-				throw std::runtime_error{"mesh data path must be a mesh in ascii .obj or binary .stl format or nerf in json format."};
-			}
+			auto& geometry = geometries[i];
+            fs::path model_path = geometry["path"];
+
+			std::string type = geometry["type"];
+			std::vector<float> center = geometry["center"];
+            vec3 center_vec(center[0], center[1], center[2]);
+
+            if (type == "Mesh") {
+                m_geometry.bvh_nodes[i] = load_mesh(model_path, center_vec);
+            } else if (type == "Nerf") {
+                m_geometry.bvh_nodes[i] = load_nerf(model_path, center_vec);
+            } else {
+                throw std::runtime_error{"Geometry type must be either 'Mesh' or 'Nerf'."};
+            }
+
+			// if (equals_case_insensitive(model_path.extension(), "obj") || equals_case_insensitive(model_path.extension(), "stl")) {
+			// 	m_geometry.bvh_nodes[i] = load_mesh(model_path);
+			// } else if (equals_case_insensitive(model_path.extension(), "json")) {
+			// 	m_geometry.bvh_nodes[i] = load_nerf(model_path);
+			// } else {
+			// 	throw std::runtime_error{"mesh data path must be a mesh in ascii .obj or binary .stl format or nerf in json format."};
+			// }
 		}
 	}
 	
@@ -1438,8 +1455,8 @@ void Testbed::load_scene(const fs::path& data_path) {
 
 		m_geometry.bvh_nodes.resize(2);
     	
-		m_geometry.bvh_nodes[0] = load_empty_mesh_node();
-    	m_geometry.bvh_nodes[1]= load_empty_nerf_node();
+		m_geometry.bvh_nodes[0] = load_empty_mesh_node(vec3(0.0f));
+    	m_geometry.bvh_nodes[1]= load_empty_nerf_node(vec3(1.0f));
 		
 	}
 		
