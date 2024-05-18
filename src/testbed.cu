@@ -142,7 +142,7 @@ void Testbed::load_training_data(const fs::path& path) {
 		case ETestbedMode::Sdf:    load_mesh(path); break;
 		case ETestbedMode::Image:  load_image(path); break;
 		case ETestbedMode::Volume: load_volume(path); break;
-		// case ETestbedMode::Geometry: load_scene(path); break;
+		case ETestbedMode::Geometry: load_scene(path); break;
 		default: throw std::runtime_error{"Invalid testbed mode."};
 	}
 
@@ -312,6 +312,7 @@ void Testbed::reload_network_from_json(const json& json, const std::string& conf
 	reset_network();
 }
 
+// TODO: add load_geometry to this function
 void Testbed::load_file(const fs::path& path) {
 	if (!path.exists()) {
 		// If the path doesn't exist, but a network config can be resolved, load that.
@@ -354,6 +355,12 @@ void Testbed::load_file(const fs::path& path) {
 			load_camera_path(path);
 			return;
 		}
+
+		// Geometry file
+    	if (file.contains("geometry")) {
+    	    load_scene(path);
+    	    return;
+    	}
 	}
 
 	if (equals_case_insensitive(path.extension(), "obj")) {

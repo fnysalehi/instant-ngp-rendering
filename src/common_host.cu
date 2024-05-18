@@ -148,8 +148,10 @@ ETestbedMode mode_from_scene(const std::string& scene) {
 	if (!scene_path.exists()) {
 		return ETestbedMode::None;
 	}
-
-	if (scene_path.is_directory() || equals_case_insensitive(scene_path.extension(), "json")) {
+	// not sure about this
+    if (scene.find("geometry")!= std::string::npos) {
+        return ETestbedMode::Geometry;
+    } else if (scene_path.is_directory() || equals_case_insensitive(scene_path.extension(), "json")) {
 		return ETestbedMode::Nerf;
 	} else if (equals_case_insensitive(scene_path.extension(), "obj") || equals_case_insensitive(scene_path.extension(), "stl")) {
 		return ETestbedMode::Sdf;
@@ -169,6 +171,8 @@ ETestbedMode mode_from_string(const std::string& str) {
 		return ETestbedMode::Image;
 	} else if (equals_case_insensitive(str, "volume")) {
 		return ETestbedMode::Volume;
+	} else if (equals_case_insensitive(str, "geometry")) {
+		return ETestbedMode::Geometry;
 	} else {
 		return ETestbedMode::None;
 	}

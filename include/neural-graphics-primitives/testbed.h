@@ -175,15 +175,16 @@ public:
 		void init_rays_from_data(uint32_t n_elements, const RaysSdfSoa& data, cudaStream_t stream);
 		uint32_t trace_bvh(TriangleBvh* bvh, const Triangle* triangles, cudaStream_t stream);
 		uint32_t trace(
-			const distance_fun_t& distance_function,
-			float zero_offset,
-			float distance_scale,
-			float maximum_distance,
-			const BoundingBox& aabb,
-			const float floor_y,
-			const TriangleOctree* octree,
-			uint32_t n_octree_levels,
-			cudaStream_t stream
+			const Triangle* triangles,
+    		uint32_t num_triangles,
+    		float zero_offset,
+    		float distance_scale,
+    		float maximum_distance,
+    		const BoundingBox& aabb,
+    		const float floor_y,
+    		const TriangleOctree* octree,
+    		const uint32_t n_octree_levels,
+    		cudaStream_t stream
 		);
 		void enlarge(size_t n_elements, cudaStream_t stream);
 		RaysMeshSoa& rays_hit() { return m_rays_hit; }
@@ -343,8 +344,6 @@ public:
 	void load_volume(const fs::path& data_path);
 
 
-	void load_scene(const fs::path& data_path);
-
 	class CudaDevice;
 
 	void render_nerf(
@@ -452,8 +451,14 @@ public:
 	void reset_network(bool clear_density_grid = true);
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf(const fs::path& data_path);
+	void load_nerf(Nerf& nerf, const fs::path& data_path, const vec3 center);
 	void load_nerf_post();
+	void load_nerf_post(Nerf& nerf, const vec3 center);
+	void load_mesh(MeshData& mesh, const fs::path& data_path, const vec3 center);
+	void load_empty_mesh(MeshData& mesh, const vec3 center);
+	void load_empty_nerf(Nerf& nerf, vec3 center);
 	void load_mesh(const fs::path& data_path);
+	void load_scene(const fs::path& data_path);
 	void set_exposure(float exposure) { m_exposure = exposure; }
 	void set_max_level(float maxlevel);
 	void set_visualized_dim(int dim);
@@ -760,8 +765,13 @@ public:
 
 
 	struct Geometry {
-	    std::shared_ptr<GeometryBvh> geometry_bvh; // unique_ptr
-		std::vector<GeometryBvhNode> bvh_nodes;
+		std::vector<MeshData> mesh_cpu;
+
+		GPUMemory<Nerf> nerf_gpu;
+		std::vector<Nerf> nerf_cpu;
+
+	    std::unique_ptr<GeometryBvh> geometry_bvh;
+
 	} m_geometry;
 
 	enum EDataType {

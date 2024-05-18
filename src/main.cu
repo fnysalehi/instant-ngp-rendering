@@ -115,12 +115,12 @@ int main_func(const std::vector<std::string>& arguments) {
 		"files",
 		"Files to be loaded. Can be a scene, network config, snapshot, camera path, or a combination of those.",
 	};
-
-	Flag MeshNerf_flag{
+	// TODO: add this to the run.py
+	Flag Geometry_flag{
 		parser,
-		"MeshNerf",
-		"start as a MeshNerf.",
-		{"MeshNerf", "MeshNerf_mode"},
+		"Geometry",
+		"start as a Geometry.",
+		{"Geometry", "Geometry_mode"},
 	};
 
 	// Parse command line arguments and react to parsing
@@ -171,10 +171,6 @@ int main_func(const std::vector<std::string>& arguments) {
 	} else if (network_config_flag) {
 		testbed.reload_network_from_file(get(network_config_flag));
 	}
-	// TODO: add if(MeshNerf_flag) to start as MeshNerf
-	// else if (MeshNerf_flag) {
-	// 	// MeshNerf::main_func(arguments);
-	// }
 
 	testbed.m_train = !no_train_flag;
 

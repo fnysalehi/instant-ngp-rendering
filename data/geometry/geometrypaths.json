@@ -1,12 +1,14 @@
-[
-    {
-        "center": [0.0, 0.0, 0.0],
-        "path": "objs/mesh.obj",
-        "type": "Mesh"
-    },
-    {
-        "center": [1.0, 1.0, 1.0],
-        "path": "objs/nerf.json",
-        "type": "Nerf"
-    }
-]
+{
+    "geometry": [
+        {
+            "center": [0.0, 0.0, 0.0],
+            "path": "objs/mesh.obj",
+            "type": "Mesh"
+        },
+        {
+            "center": [1.0, 1.0, 1.0],
+            "path": "objs/nerf.json",
+            "type": "Nerf"
+        }
+    ]
+}
