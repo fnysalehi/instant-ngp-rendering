@@ -358,6 +358,8 @@ void Testbed::load_file(const fs::path& path) {
 
 		// Geometry file
     	if (file.contains("geometry")) {
+			m_train = false;
+			tlog::info() << "Loading geometry from: " << path;
     	    load_scene(path);
     	    return;
     	}
@@ -1778,12 +1780,12 @@ void Testbed::visualize_nerf_cameras(ImDrawList* list, const mat4& world2proj) {
 }
 
 void Testbed::visualize_intersected_rays(ImDrawList* list, const mat4& world2proj) {
-	for (const auto& ray : m_geometry.geometry_bvh->getIntersectedRays()) {
-        vec3 origin = ray.first;
-        vec3 endPoint = ray.second;
+	// for (const auto& ray : m_geometry.geometry_bvh->getIntersectedRays()) {
+    //     vec3 origin = ray.first;
+    //     vec3 endPoint = ray.second;
 
-        add_debug_line(list, world2proj, origin, endPoint, 0xffffffff);
-    }
+    //     add_debug_line(list, world2proj, origin, endPoint, 0xffffffff);
+    // }
 }
 
 void Testbed::draw_visualizations(ImDrawList* list, const mat4x3& camera_matrix) {
@@ -2747,12 +2749,14 @@ void Testbed::prepare_next_camera_path_frame() {
 
 void Testbed::train_and_render(bool skip_rendering) {
 	if (m_train) {
+		tlog::info() << "we are training!" ;	
 		train(m_training_batch_size);
 	}
 
 	// If we don't have a trainer, as can happen when having loaded training data or changed modes without having
 	// explicitly loaded a new neural network.
 	if (m_testbed_mode != ETestbedMode::None && !m_network) {
+		tlog::info() << "we are reloading the network!" ;
 		reload_network_from_file();
 		if (!m_network) {
 			throw std::runtime_error{"Unable to reload neural network."};
@@ -2760,6 +2764,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 	}
 
 	if (m_mesh.optimize_mesh) {
+		tlog::info() << "we are optimizing the mesh!" ;
 		optimise_mesh_step(1);
 	}
 
@@ -3603,6 +3608,7 @@ Testbed::NetworkDims Testbed::network_dims() const {
 		case ETestbedMode::Sdf:    return network_dims_sdf(); break;
 		case ETestbedMode::Image:  return network_dims_image(); break;
 		case ETestbedMode::Volume: return network_dims_volume(); break;
+		case ETestbedMode::Geometry: return network_dims_geometry(); break;
 		default: throw std::runtime_error{"Invalid mode."};
 	}
 }
@@ -4447,9 +4453,41 @@ void Testbed::render_frame_main(
 		case ETestbedMode::Volume:
 			render_volume(device.stream(), device.render_buffer_view(), focal_length, camera_matrix0, screen_center, foveation);
 			break;
-		// case ETestbedMode::Geometry:
-		// 	render_geometry(device.stream(), device, device.render_buffer_view(), focal_length, camera_matrix0, screen_center, foveation, visualized_dimension);
-		// 	break;
+		case ETestbedMode::Geometry:
+			{
+				tlog::info() << "Rendering geometry";
+
+				// distance_fun_t distance_fun = [&](uint32_t n_elements, const vec3* positions, float* distances, cudaStream_t stream) {
+    			// 	m_geometry.geometry_mesh_bvh->signed_distance_gpu(
+    			// 	    n_elements,
+    			// 	    m_sdf.mesh_sdf_mode,
+    			// 	    positions,
+    			// 	    distances,
+    			// 	    m_sdf.triangles_gpu.data(),
+    			// 	    false,
+    			// 	    stream
+    			// 	);
+				// };
+
+				normals_fun_t normals_fun = [](uint32_t n_elements, const vec3* positions, vec3* normals, cudaStream_t stream) {
+    				// NO-OP. Normals will automatically be populated by raytrace
+				};
+
+				render_geometry_mesh(
+					device.stream(),
+					normals_fun,
+					device.render_buffer_view(),
+					focal_length,
+					camera_matrix0,
+					screen_center,
+					foveation,
+					visualized_dimension
+				);
+
+				render_geometry_nerf(device.stream(), device, device.render_buffer_view(), device.nerf_network(), device.data().density_grid_bitfield_ptr, focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter, screen_center, foveation, visualized_dimension);
+			
+			}
+			break;
 		default:
 			// No-op if no mode is active
 			break;

@@ -31,6 +31,105 @@ struct TriangleBvhNode {
 	int right_idx;
 };
 
+// Sorting networks from http://users.telenet.be/bertdobbelaere/SorterHunter/sorting_networks.html#N4L5D3
+template <uint32_t N, typename T>
+__host__ __device__ void sorting_network(T values[N]) {
+	static_assert(N <= 8, "Sorting networks are only implemented up to N==8");
+	if (N <= 1) {
+		return;
+	} else if (N == 2) {
+		compare_and_swap(values[0], values[1]);
+	} else if (N == 3) {
+		compare_and_swap(values[0], values[2]);
+		compare_and_swap(values[0], values[1]);
+		compare_and_swap(values[1], values[2]);
+	} else if (N == 4) {
+		compare_and_swap(values[0], values[2]);
+		compare_and_swap(values[1], values[3]);
+		compare_and_swap(values[0], values[1]);
+		compare_and_swap(values[2], values[3]);
+		compare_and_swap(values[1], values[2]);
+	} else if (N == 5) {
+		compare_and_swap(values[0], values[3]);
+		compare_and_swap(values[1], values[4]);
+
+		compare_and_swap(values[0], values[2]);
+		compare_and_swap(values[1], values[3]);
+
+		compare_and_swap(values[0], values[1]);
+		compare_and_swap(values[2], values[4]);
+
+		compare_and_swap(values[1], values[2]);
+		compare_and_swap(values[3], values[4]);
+
+		compare_and_swap(values[2], values[3]);
+	} else if (N == 6) {
+		compare_and_swap(values[0], values[5]);
+		compare_and_swap(values[1], values[3]);
+		compare_and_swap(values[2], values[4]);
+
+		compare_and_swap(values[1], values[2]);
+		compare_and_swap(values[3], values[4]);
+
+		compare_and_swap(values[0], values[3]);
+		compare_and_swap(values[2], values[5]);
+
+		compare_and_swap(values[0], values[1]);
+		compare_and_swap(values[2], values[3]);
+		compare_and_swap(values[4], values[5]);
+
+		compare_and_swap(values[1], values[2]);
+		compare_and_swap(values[3], values[4]);
+	} else if (N == 7) {
+		compare_and_swap(values[0], values[6]);
+		compare_and_swap(values[2], values[3]);
+		compare_and_swap(values[4], values[5]);
+
+		compare_and_swap(values[0], values[2]);
+		compare_and_swap(values[1], values[4]);
+		compare_and_swap(values[3], values[6]);
+
+		compare_and_swap(values[0], values[1]);
+		compare_and_swap(values[2], values[5]);
+		compare_and_swap(values[3], values[4]);
+
+		compare_and_swap(values[1], values[2]);
+		compare_and_swap(values[4], values[6]);
+
+		compare_and_swap(values[2], values[3]);
+		compare_and_swap(values[4], values[5]);
+
+		compare_and_swap(values[1], values[2]);
+		compare_and_swap(values[3], values[4]);
+		compare_and_swap(values[5], values[6]);
+	} else if (N == 8) {
+		compare_and_swap(values[0], values[2]);
+		compare_and_swap(values[1], values[3]);
+		compare_and_swap(values[4], values[6]);
+		compare_and_swap(values[5], values[7]);
+
+		compare_and_swap(values[0], values[4]);
+		compare_and_swap(values[1], values[5]);
+		compare_and_swap(values[2], values[6]);
+		compare_and_swap(values[3], values[7]);
+
+		compare_and_swap(values[0], values[1]);
+		compare_and_swap(values[2], values[3]);
+		compare_and_swap(values[4], values[5]);
+		compare_and_swap(values[6], values[7]);
+
+		compare_and_swap(values[2], values[4]);
+		compare_and_swap(values[3], values[5]);
+
+		compare_and_swap(values[1], values[4]);
+		compare_and_swap(values[3], values[6]);
+
+		compare_and_swap(values[1], values[2]);
+		compare_and_swap(values[3], values[4]);
+		compare_and_swap(values[5], values[6]);
+	}
+}
+
 template <typename T, int MAX_SIZE=32>
 class FixedStack {
 public:
@@ -56,6 +155,22 @@ private:
 
 using FixedIntStack = FixedStack<int>;
 
+struct DistAndIdx {
+	float dist;
+	uint32_t idx;
+
+	// Sort in descending order!
+	__host__ __device__ bool operator<(const DistAndIdx& other) {
+		return dist < other.dist;
+	}
+};
+
+template <typename T>
+__host__ __device__ void inline compare_and_swap(T& t1, T& t2) {
+	if (t1 < t2) {
+		T tmp{t1}; t1 = t2; t2 = tmp;
+	}
+}
 
 __host__ __device__ std::pair<int, float> trianglebvh_ray_intersect(const vec3& ro, const vec3& rd, const TriangleBvhNode* __restrict__ bvhnodes, const Triangle* __restrict__ triangles);
 

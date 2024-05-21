@@ -16,6 +16,8 @@
 
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/nerf_device.cuh>
+#include <neural-graphics-primitives/nerf_loader.h>
+#include <neural-graphics-primitives/adam_optimizer.h>
 
 #ifdef NGP_PYTHON
 #  include <pybind11/pybind11.h>
@@ -178,6 +180,11 @@ struct Nerf {
 		void set_rendering_extra_dims_from_training_view(int trainview);
 		void set_rendering_extra_dims(const std::vector<float>& vals);
 		std::vector<float> get_rendering_extra_dims_cpu() const;
+
+		vec3 center = vec3(0.0f);
+		float scale = 1.0f;
+
+
 }; 
 
 struct RaysNerfSoa {

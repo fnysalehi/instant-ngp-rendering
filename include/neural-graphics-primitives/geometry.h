@@ -29,12 +29,13 @@ struct RaysMeshSoa {
     }
 #endif
 
-	void set(vec3* pos, vec3* normal, float* distance, float* prev_distance, float* total_distance, GeometryPayload* payload) {
+	void set(vec3* pos, vec3* normal, float* distance, float* prev_distance, float* total_distance, float* min_visibility, GeometryPayload* payload) {
         this->pos = pos;
         this->normal = normal;
         this->distance = distance;
         this->prev_distance = prev_distance;
         this->total_distance = total_distance;
+        this->min_visibility = min_visibility;
         this->payload = payload;
     }
     vec3* pos;
@@ -42,8 +43,7 @@ struct RaysMeshSoa {
 	float* distance;
 	float* prev_distance;
 	float* total_distance;
-	// float* min_visibility;   not sure if we need this
-    // maybe add 
+	float* min_visibility;
     GeometryPayload* payload;
 };
 

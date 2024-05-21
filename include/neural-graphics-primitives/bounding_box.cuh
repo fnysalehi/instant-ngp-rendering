@@ -39,6 +39,8 @@ NGP_HOST_DEVICE inline void project(vec3 points[N_POINTS], const vec3& axis, flo
 		}
 	}
 }
+struct MeshData;
+struct Nerf;
 
 struct BoundingBox {
 	NGP_HOST_DEVICE BoundingBox() {}
@@ -58,6 +60,13 @@ struct BoundingBox {
 		}
 	}
 
+	BoundingBox(MeshData* begin, MeshData* end);
+	void enlarge(const MeshData& mesh);
+
+	BoundingBox(Nerf* begin, Nerf* end);
+	
+	void enlarge(const Nerf& other);
+
 	NGP_HOST_DEVICE void enlarge(const BoundingBox& other) {
 		min = tcnn::min(min, other.min);
 		max = tcnn::max(max, other.max);
@@ -73,7 +82,7 @@ struct BoundingBox {
 		min = tcnn::min(min, point);
 		max = tcnn::max(max, point);
 	}
-
+	
 	NGP_HOST_DEVICE void inflate(float amount) {
 		min -= vec3(amount);
 		max += vec3(amount);
@@ -243,6 +252,11 @@ struct BoundingBox {
 		v[5] = {max.x, min.y, max.z};
 		v[6] = {max.x, max.y, min.z};
 		v[7] = {max.x, max.y, max.z};
+	}
+
+	NGP_HOST_DEVICE void translate(const vec3 translation) {
+		min += translation;
+		max += translation;
 	}
 
 	vec3 min = vec3(std::numeric_limits<float>::infinity());

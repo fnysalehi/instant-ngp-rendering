@@ -2,13 +2,18 @@
     "geometry": [
         {
             "center": [0.0, 0.0, 0.0],
-            "path": "objs/mesh.obj",
+            "path": "data/geometry/objs/cube1.obj",
             "type": "Mesh"
         },
         {
-            "center": [1.0, 1.0, 1.0],
-            "path": "objs/nerf.json",
-            "type": "Nerf"
+            "center": [0.0, 0.0, 0.0],
+            "path": "data/geometry/objs/cube2.obj",
+            "type": "Mesh"
+        },
+        {
+            "center": [0.0, 0.0, 0.0],
+            "path": "data/geometry/objs/cube3.obj",
+            "type": "Mesh"
         }
     ]
 }

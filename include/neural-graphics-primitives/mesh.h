@@ -10,6 +10,7 @@
 #include <neural-graphics-primitives/triangle.cuh>
 #include <neural-graphics-primitives/triangle_bvh.cuh>
 #include <neural-graphics-primitives/triangle_octree.cuh>
+#include <neural-graphics-primitives/discrete_distribution.h>
 
 
 namespace ngp {
@@ -19,28 +20,9 @@ struct MeshData {
 	MeshData() 
     : scale(1.0f), 
       center(vec3(0.0f)), 
-    //   brdf(BRDFParams()), 
       octree_depth_target(0), 
       zero_offset(0) 
     {
-    }
-
-	MeshData& operator=(const MeshData& other) {
-        if (this != &other) {
-            scale = other.scale;
-            triangles_gpu = other.triangles_gpu;
-            triangles_cpu = other.triangles_cpu;
-            triangle_weights = other.triangle_weights;
-            triangle_distribution = other.triangle_distribution;
-            triangle_cdf = other.triangle_cdf;
-            triangle_bvh = other.triangle_bvh;
-            triangle_octree = other.triangle_octree;
-            octree_depth_target = other.octree_depth_target;
-            zero_offset = other.zero_offset;
-            center = other.center;
-            // brdf = other.brdf;
-        }
-        return *this;
     }
 	
 	float scale = 1.0f;

@@ -158,41 +158,51 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	Testbed testbed;
 
+	tlog::info() << "starting the testbed." ;
+
 	for (auto file : get(files)) {
+		tlog::info() << "Loading file: " << file;
 		testbed.load_file(file);
 	}
 
 	if (scene_flag) {
-		testbed.load_training_data(get(scene_flag));
+		std::string scene = get(scene_flag);
+    	tlog::info() << "Loading scene: " << scene;
+    	testbed.load_training_data(scene);
 	}
 
 	if (snapshot_flag) {
+		tlog::info() << "Loading snapshot: " << get(snapshot_flag);
 		testbed.load_snapshot(static_cast<fs::path>(get(snapshot_flag)));
 	} else if (network_config_flag) {
+		tlog::info() << "Loading network config: " << get(network_config_flag);
 		testbed.reload_network_from_file(get(network_config_flag));
 	}
 
 	testbed.m_train = !no_train_flag;
-
+	tlog::info() << "train=" << testbed.m_train;
 #ifdef NGP_GUI
 	bool gui = !no_gui_flag;
+	tlog::info() << "gui" << gui;
 #else
 	bool gui = false;
 #endif
 
 	if (gui) {
+		tlog::info() << "init_window";
 		testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
 	}
 
 	if (vr_flag) {
+		tlog::info() << "init_vr";
 		testbed.init_vr();
 	}
 
 	// Render/training loop
 	while (testbed.frame()) {
-		if (!gui) {
-			tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
-		}
+		// if (!gui) {
+		// 	tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
+		// }
 	}
 
 	return 0;

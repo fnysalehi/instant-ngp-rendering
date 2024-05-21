@@ -149,8 +149,9 @@ public:
 	public:
 		MyTracer() {}
 
-		void init_rays_from_camera(
-			uint32_t spp,
+		//mesh
+		void init_rays_from_camera_mesh(
+			uint32_t sample_index,
 			const ivec2& resolution,
 			const vec2& focal_length,
 			const mat4x3& camera_matrix,
@@ -167,45 +168,107 @@ public:
 			vec4* frame_buffer,
 			float* depth_buffer,
 			const Buffer2DView<const uint8_t>& hidden_area_mask,
-			const TriangleOctree* octree,
-			uint32_t n_octree_levels,
 			cudaStream_t stream
 		);
 
-		void init_rays_from_data(uint32_t n_elements, const RaysSdfSoa& data, cudaStream_t stream);
+		void init_rays_from_data_mesh(uint32_t n_elements, const RaysMeshSoa& data, cudaStream_t stream);
+		uint32_t trace_mesh_bvh(GeometryBvh* bvh, const MeshData* meshes, cudaStream_t stream);
 		uint32_t trace_bvh(TriangleBvh* bvh, const Triangle* triangles, cudaStream_t stream);
-		uint32_t trace(
-			const Triangle* triangles,
-    		uint32_t num_triangles,
-    		float zero_offset,
-    		float distance_scale,
-    		float maximum_distance,
-    		const BoundingBox& aabb,
-    		const float floor_y,
-    		const TriangleOctree* octree,
-    		const uint32_t n_octree_levels,
-    		cudaStream_t stream
+
+		void enlarge_mesh(size_t n_elements, cudaStream_t stream);
+		RaysMeshSoa& rays_hit() { return m_rays_hit_mesh; }
+		RaysMeshSoa& rays_init() { return m_rays_mesh[0];	}
+		uint32_t n_rays_initialized() const { return m_n_rays_initialized_mesh; }
+		void set_trace_shadow_rays(bool val) { m_trace_shadow_rays_mesh = val; }
+		void set_shadow_sharpness(float val) { m_shadow_sharpness_mesh = val; }
+		
+		// nerf:
+		void init_rays_from_camera_nerf(
+			uint32_t spp,
+			uint32_t padded_output_width,
+			uint32_t n_extra_dims,
+			const ivec2& resolution,
+			const vec2& focal_length,
+			const mat4x3& camera_matrix0,
+			const mat4x3& camera_matrix1,
+			const vec4& rolling_shutter,
+			const vec2& screen_center,
+			const vec3& parallax_shift,
+			bool snap_to_pixel_centers,
+			const BoundingBox& render_aabb,
+			const mat3& render_aabb_to_local,
+			float near_distance,
+			float plane_z,
+			float aperture_size,
+			const Foveation& foveation,
+			const Lens& lens,
+			const Buffer2DView<const vec4>& envmap,
+			const Buffer2DView<const vec2>& distortion,
+			vec4* frame_buffer,
+			float* depth_buffer,
+			const Buffer2DView<const uint8_t>& hidden_area_mask,
+			const uint8_t* grid,
+			int show_accel,
+			uint32_t max_mip,
+			float cone_angle_constant,
+			ERenderMode render_mode,
+			cudaStream_t stream
 		);
-		void enlarge(size_t n_elements, cudaStream_t stream);
-		RaysMeshSoa& rays_hit() { return m_rays_hit; }
-		RaysMeshSoa& rays_init() { return m_rays[0];	}
-		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
-		void set_trace_shadow_rays(bool val) { m_trace_shadow_rays = val; }
-		void set_shadow_sharpness(float val) { m_shadow_sharpness = val; }
+
+		uint32_t trace_nerf_bvh(GeometryBvh* bvh, const Nerf* nerfs, cudaStream_t stream);
+		uint32_t trace_nerf(
+			const std::shared_ptr<NerfNetwork<network_precision_t>>& network,
+			const BoundingBox& render_aabb,
+			const mat3& render_aabb_to_local,
+			const BoundingBox& train_aabb,
+			const vec2& focal_length,
+			float cone_angle_constant,
+			const uint8_t* grid,
+			ERenderMode render_mode,
+			const mat4x3 &camera_matrix,
+			float depth_scale,
+			int visualized_layer,
+			int visualized_dim,
+			ENerfActivation rgb_activation,
+			ENerfActivation density_activation,
+			int show_accel,
+			uint32_t max_mip,
+			float min_transmittance,
+			float glow_y_cutoff,
+			int glow_mode,
+			const float* extra_dims_gpu,
+			cudaStream_t stream
+		);
+
+		void enlarge_nerf(size_t n_elements, uint32_t padded_output_width, uint32_t n_extra_dims, cudaStream_t stream);
+		RaysNerfSoa& rays_hit_nerf() { return m_rays_hit_nerf; }
+		RaysNerfSoa& rays_init_nerf() { return m_rays_nerf[0]; }
+		uint32_t n_rays_initialized_nerf() const { return m_n_rays_initialized_nerf; }
+
+
 	private:
-		RaysMeshSoa m_rays[2];
-		RaysMeshSoa m_rays_hit;
-		uint32_t* m_hit_counter;
-		uint32_t* m_alive_counter;
+		//mesh
+		RaysMeshSoa m_rays_mesh[2];
+		RaysMeshSoa m_rays_hit_mesh;
+		uint32_t* m_hit_counter_mesh;
+		uint32_t* m_alive_counter_mesh;
 
-		uint32_t m_n_rays_initialized = 0;
-		float m_shadow_sharpness = 2048.f;
-		bool m_trace_shadow_rays = false;
+		uint32_t m_n_rays_initialized_mesh = 0;
+		float m_shadow_sharpness_mesh = 2048.f;
+		bool m_trace_shadow_rays_mesh = false;
 
-		GPUMemoryArena::Allocation m_scratch_alloc;
+		GPUMemoryArena::Allocation m_scratch_alloc_mesh;
+		
+		// nerf
+		RaysNerfSoa m_rays_nerf[2];
+		RaysNerfSoa m_rays_hit_nerf;
+		network_precision_t* m_network_output_nerf;
+		float* m_network_input_nerf;
+		uint32_t* m_hit_counter_nerf;
+		uint32_t* m_alive_counter_nerf;
+		uint32_t m_n_rays_initialized_nerf = 0;
+		GPUMemoryArena::Allocation m_scratch_alloc_nerf;
 	};
-
-
 
 	class NerfTracer {
 	public:
@@ -336,7 +399,7 @@ public:
 	NetworkDims network_dims_sdf() const;
 	NetworkDims network_dims_image() const;
 	NetworkDims network_dims_nerf() const;
-
+	NetworkDims network_dims_geometry() const;
 	NetworkDims network_dims() const;
 
 	void train_volume(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
@@ -388,12 +451,26 @@ public:
 		const vec2& screen_center,
 		const Foveation& foveation
 	);
-	void render_geometry(
+	void render_geometry_mesh(
+	cudaStream_t stream,
+	const normals_fun_t& normals_function,
+	const CudaRenderBufferView& render_buffer,
+	const vec2& focal_length,
+	const mat4x3& camera_matrix,
+	const vec2& screen_center,
+	const Foveation& foveation,
+	int visualized_dimension
+	);
+	void render_geometry_nerf(
 		cudaStream_t stream,
 		CudaDevice& device,
 		const CudaRenderBufferView& render_buffer,
+		const std::shared_ptr<NerfNetwork<network_precision_t>>& nerf_network,
+		const uint8_t* density_grid_bitfield,
 		const vec2& focal_length,
-		const mat4x3& camera_matrix,
+		const mat4x3& camera_matrix0,
+		const mat4x3& camera_matrix1,
+		const vec4& rolling_shutter,
 		const vec2& screen_center,
 		const Foveation& foveation,
 		int visualized_dimension
@@ -451,12 +528,12 @@ public:
 	void reset_network(bool clear_density_grid = true);
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf(const fs::path& data_path);
-	void load_nerf(Nerf& nerf, const fs::path& data_path, const vec3 center);
 	void load_nerf_post();
-	void load_nerf_post(Nerf& nerf, const vec3 center);
-	void load_mesh(MeshData& mesh, const fs::path& data_path, const vec3 center);
-	void load_empty_mesh(MeshData& mesh, const vec3 center);
-	void load_empty_nerf(Nerf& nerf, vec3 center);
+	void load_nerf(Nerf* nerf, const fs::path& data_path, const vec3 center);
+	void load_nerf_post(Nerf* nerf, const vec3 center);
+	void load_mesh(MeshData* mesh, const fs::path& data_path, const vec3 center);
+	void load_empty_mesh(MeshData* mesh, const vec3 center);
+	void load_empty_nerf(Nerf* nerf, vec3 center);
 	void load_mesh(const fs::path& data_path);
 	void load_scene(const fs::path& data_path);
 	void set_exposure(float exposure) { m_exposure = exposure; }
@@ -765,12 +842,17 @@ public:
 
 
 	struct Geometry {
+		float zero_offset = 0;
+		float shadow_sharpness = 2048.0f;
+
 		std::vector<MeshData> mesh_cpu;
 
-		GPUMemory<Nerf> nerf_gpu;
 		std::vector<Nerf> nerf_cpu;
 
-	    std::unique_ptr<GeometryBvh> geometry_bvh;
+	    std::shared_ptr<GeometryBvh> geometry_mesh_bvh;
+		std::shared_ptr<GeometryBvh> geometry_nerf_bvh;
+
+		BRDFParams brdf;
 
 	} m_geometry;
 

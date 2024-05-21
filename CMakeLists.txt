@@ -21,7 +21,7 @@ endif()
 
 option(NGP_BUILD_EXECUTABLE "Build instant-ngp.exe?" ON)
 option(NGP_BUILD_WITH_GUI "Build with GUI support (requires GLFW and GLEW)?" ON)
-option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" ON)
+option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" OFF)
 option(NGP_BUILD_WITH_PYTHON_BINDINGS "Build bindings that allow instrumenting instant-ngp with Python?" ON)
 option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
 
@@ -272,6 +272,7 @@ list(APPEND NGP_SOURCES
 	src/tinyexr_wrapper.cu
 	src/tinyobj_loader_wrapper.cu
 	src/triangle_bvh.cu
+	src/geometry_bvh.cu
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
