@@ -132,7 +132,7 @@ void Testbed::load_training_data(const fs::path& path) {
 	if (scene_mode == ETestbedMode::None) {
 		throw std::runtime_error{fmt::format("Unknown scene format for path '{}'.", path.str())};
 	}
-
+	tlog::info() << "Setting mode to " << to_string(scene_mode);
 	set_mode(scene_mode);
 
 	m_data_path = path;
@@ -272,6 +272,8 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 }
 
 void Testbed::reload_network_from_file(const fs::path& path) {
+	
+
 	if (!path.empty()) {
 		fs::path candidate = find_network_config(path);
 		if (candidate.exists() || !m_network_config_path.exists()) {
@@ -359,6 +361,7 @@ void Testbed::load_file(const fs::path& path) {
 		// Geometry file
     	if (file.contains("geometry")) {
 			m_train = false;
+			set_mode(ETestbedMode::Geometry);
 			tlog::info() << "Loading geometry from: " << path;
     	    load_scene(path);
     	    return;
@@ -488,7 +491,7 @@ void Testbed::reset_camera() {
 	m_zoom = 1.0f;
 	m_screen_center = vec2(0.5f);
 
-	if (m_testbed_mode == ETestbedMode::Image) {
+	if (m_testbed_mode == ETestbedMode::Image && m_testbed_mode == ETestbedMode::Geometry) {
 		// Make image full-screen at the given view distance
 		m_relative_focal_length = vec2(1.0f);
 		m_scale = 1.0f;
@@ -2748,14 +2751,14 @@ void Testbed::prepare_next_camera_path_frame() {
 }
 
 void Testbed::train_and_render(bool skip_rendering) {
-	if (m_train) {
+	if (m_train && m_testbed_mode != ETestbedMode::Geometry) {
 		tlog::info() << "we are training!" ;	
 		train(m_training_batch_size);
 	}
 
 	// If we don't have a trainer, as can happen when having loaded training data or changed modes without having
 	// explicitly loaded a new neural network.
-	if (m_testbed_mode != ETestbedMode::None && !m_network) {
+	if (m_testbed_mode != ETestbedMode::Geometry && m_testbed_mode != ETestbedMode::None && !m_network) {
 		tlog::info() << "we are reloading the network!" ;
 		reload_network_from_file();
 		if (!m_network) {
@@ -2773,7 +2776,13 @@ void Testbed::train_and_render(bool skip_rendering) {
 	float frame_ms = m_camera_path.rendering ? 0.0f : m_frame_ms.val();
 	apply_camera_smoothing(frame_ms);
 
+	if(Testbed::m_testbed_mode == ETestbedMode::Geometry) {
+		m_render_window = true;
+		m_render = true;
+		skip_rendering = false;
+	}
 	if (!m_render_window || !m_render || skip_rendering) {
+		tlog::info() << "we are skipping rendering!" ;
 		return;
 	}
 
@@ -3071,7 +3080,6 @@ void Testbed::set_n_views(size_t n_views) {
 	while (m_views.size() > n_views) {
 		m_views.pop_back();
 	}
-
 	m_rgba_render_textures.resize(n_views);
 	m_depth_render_textures.resize(n_views);
 	while (m_views.size() < n_views) {
@@ -3400,7 +3408,7 @@ bool Testbed::frame() {
 		prepare_next_camera_path_frame();
 		skip_rendering = false;
 	}
-
+	
 #ifdef NGP_GUI
 	if (m_hmd && m_hmd->is_visible()) {
 		skip_rendering = false;
@@ -4010,11 +4018,16 @@ bool Testbed::clear_tmp_dir() {
 }
 
 void Testbed::train(uint32_t batch_size) {
+	
 	if (!m_training_data_available || m_camera_path.rendering) {
 		m_train = false;
 		return;
 	}
-
+	if (m_testbed_mode == ETestbedMode::Geometry) {
+		tlog::info() << "Training is not supported in Geometry mode.";
+		m_train = false;
+		return;
+	}
 	if (m_testbed_mode == ETestbedMode::None) {
 		throw std::runtime_error{"Cannot train without a mode."};
 	}
@@ -4354,9 +4367,11 @@ void Testbed::render_frame_main(
 	const Foveation& foveation,
 	int visualized_dimension
 ) {
+
+	// tlog::info() << "Rendering frame main.";
 	device.render_buffer_view().clear(device.stream());
 
-	if (!m_network) {
+	if (!m_network && m_testbed_mode != ETestbedMode::Geometry) {
 		return;
 	}
 
@@ -4455,7 +4470,7 @@ void Testbed::render_frame_main(
 			break;
 		case ETestbedMode::Geometry:
 			{
-				tlog::info() << "Rendering geometry";
+				// tlog::info() << "Rendering geometry";
 
 				// distance_fun_t distance_fun = [&](uint32_t n_elements, const vec3* positions, float* distances, cudaStream_t stream) {
     			// 	m_geometry.geometry_mesh_bvh->signed_distance_gpu(
@@ -4468,11 +4483,12 @@ void Testbed::render_frame_main(
     			// 	    stream
     			// 	);
 				// };
-
+				
+				// Todo: this should not be empty!
 				normals_fun_t normals_fun = [](uint32_t n_elements, const vec3* positions, vec3* normals, cudaStream_t stream) {
     				// NO-OP. Normals will automatically be populated by raytrace
 				};
-
+				// tlog::info() << "about ot render geometry mesh";
 				render_geometry_mesh(
 					device.stream(),
 					normals_fun,
@@ -4484,7 +4500,7 @@ void Testbed::render_frame_main(
 					visualized_dimension
 				);
 
-				render_geometry_nerf(device.stream(), device, device.render_buffer_view(), device.nerf_network(), device.data().density_grid_bitfield_ptr, focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter, screen_center, foveation, visualized_dimension);
+				// render_geometry_nerf(device.stream(), device, device.render_buffer_view(), device.nerf_network(), device.data().density_grid_bitfield_ptr, focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter, screen_center, foveation, visualized_dimension);
 			
 			}
 			break;

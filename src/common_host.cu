@@ -150,6 +150,7 @@ ETestbedMode mode_from_scene(const std::string& scene) {
 	}
 	// not sure about this
     if (scene.find("geometry")!= std::string::npos) {
+		tlog::info() << "setting the mode geometry";
         return ETestbedMode::Geometry;
     } else if (scene_path.is_directory() || equals_case_insensitive(scene_path.extension(), "json")) {
 		return ETestbedMode::Nerf;

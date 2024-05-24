@@ -68,6 +68,8 @@ protected:
 	GPUMemory<GeometryBvhNode> m_nodes_gpu;
 	GeometryBvh(){}
 
+
+
 	BvhType m_nodes_type;
 };
 

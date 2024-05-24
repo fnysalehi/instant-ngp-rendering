@@ -38,11 +38,14 @@ namespace ngp {
 extern std::atomic<size_t> g_total_n_bytes_allocated;
 
 void CudaSurface2D::free() {
+	printf("freeing\n");
 	if (m_surface) {
+		printf("destroying surface\n");
 		cudaDestroySurfaceObject(m_surface);
 	}
 	m_surface = 0;
 	if (m_array) {
+		printf("freeing array\n");
 		cudaFreeArray(m_array);
 		g_total_n_bytes_allocated -= product(m_size) * sizeof(float) * m_n_channels;
 	}
@@ -66,6 +69,7 @@ void CudaSurface2D::resize(const ivec2& size, int n_channels) {
 		case 4: desc = cudaCreateChannelDesc<float4>(); break;
 		default: throw std::runtime_error{fmt::format("CudaSurface2D: unsupported number of channels {}", n_channels)};
 	}
+	printf("size.x: %d, size.y: %d\n", size.x, size.y);
 	CUDA_CHECK_THROW(cudaMallocArray(&m_array, &desc, size.x, size.y, cudaArraySurfaceLoadStore));
 
 	g_total_n_bytes_allocated += product(m_size) * sizeof(float) * n_channels;

@@ -2,17 +2,7 @@
     "geometry": [
         {
             "center": [0.0, 0.0, 0.0],
-            "path": "data/geometry/objs/cube1.obj",
-            "type": "Mesh"
-        },
-        {
-            "center": [0.0, 0.0, 0.0],
-            "path": "data/geometry/objs/cube2.obj",
-            "type": "Mesh"
-        },
-        {
-            "center": [0.0, 0.0, 0.0],
-            "path": "data/geometry/objs/cube3.obj",
+            "path": "/home/fsalehi/instant-ngp-rendering/data/geometry/objs/cube1.obj",
             "type": "Mesh"
         }
     ]

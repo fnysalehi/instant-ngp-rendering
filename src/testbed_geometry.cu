@@ -2099,6 +2099,7 @@ void Testbed::MyTracer::init_rays_from_camera_mesh(
 		hidden_area_mask
 	);
 	m_n_rays_initialized_mesh = (uint32_t)n_pixels;
+	// tlog::info() << "m_n_rays_initialized_mesh: " << m_n_rays_initialized_mesh;
 }
 
 void Testbed::MyTracer::init_rays_from_data_mesh(uint32_t n_elements, const RaysMeshSoa& data, cudaStream_t stream) {
@@ -2123,23 +2124,6 @@ uint32_t Testbed::MyTracer::trace_mesh_bvh(GeometryBvh* bvh, const MeshData* mes
 	bvh->ray_trace_mesh_gpu(n_alive, m_rays_mesh[0].pos, m_rays_mesh[0].normal, meshes, stream);
 	return n_alive;
 }
-
-// uint32_t Testbed::MyTracer::trace_bvh(TriangleBvh* bvh, const Triangle* triangles, cudaStream_t stream) {
-// 	uint32_t n_alive = m_n_rays_initialized;
-// 	m_n_rays_initialized = 0;
-
-// 	if (!bvh) {
-// 		return 0;
-// 	}
-
-// 	// Abuse the normal buffer to temporarily hold ray directions
-// 	parallel_for_gpu(stream, n_alive, [payloads=m_rays[0].payload, normals=m_rays[0].normal] __device__ (size_t i) {
-// 		normals[i] = payloads[i].dir;
-// 	});
-
-// 	bvh->ray_trace_gpu(n_alive, m_rays[0].pos, m_rays[0].normal, triangles, stream);
-// 	return n_alive;
-// }
 
 // allocate and distribute workspace memory for rays
 void Testbed::MyTracer::enlarge_mesh(size_t n_elements, cudaStream_t stream) {
@@ -2179,12 +2163,42 @@ void Testbed::render_geometry_mesh(
 	const Foveation& foveation,
 	int visualized_dimension
 ) {
+	// tlog::info() << "render_geometry_mesh start ";
+	
+	// switch(m_render_mode) {
+    //     case ERenderMode::AO: tlog::info() << "AO"; break;
+    //     case ERenderMode::Shade: tlog::info() << "Shade"; break;
+    // 	case ERenderMode::Normals: tlog::info() << "Normals"; break;
+    // 	case ERenderMode::Positions: tlog::info() << "Positions"; break;
+    // 	case ERenderMode::Depth: tlog::info() << "Depth"; break;
+    // 	case ERenderMode::Distortion: tlog::info() << "Distortion"; break;
+    // 	case ERenderMode::Cost: tlog::info() << "Cost"; break;
+    // 	case ERenderMode::Slice: tlog::info() << "Slice"; break;
+    // 	case ERenderMode::NumRenderModes: tlog::info() << "NumRenderModes"; break;
+    // 	case ERenderMode::EncodingVis: tlog::info() << "EncodingVis"; break;
+    // 	default: tlog::info() << "Unknown"; break;
+
+    // }
+	tlog::info() << "Camera Matrix:";
+	for (int i = 0; i < 4; ++i) {
+	    for (int j = 0; j < 3; ++j) {
+	        tlog::info() << camera_matrix[i][j];
+	    }
+	}
+
 	float plane_z = m_slice_plane_z + m_scale;
+	if (m_render_mode == ERenderMode::Slice) {
+		plane_z = -plane_z;
+	}
 
 	MyTracer tracer;
 
-	BoundingBox mesh_bounding_box = m_geometry.geometry_mesh_bvh->nodes_gpu()[0].bb;	//the biggest bb, the root node
+	BoundingBox mesh_bounding_box = m_geometry.geometry_mesh_bvh->get_nodes()[0].bb;	//the biggest bb, the root node
+	// tlog::info() << "setting bounding box" ;
+	// tlog::info() << "mesh_bounding_box.min: (" << mesh_bounding_box.min.x << ", " << mesh_bounding_box.min.y << ", " << mesh_bounding_box.min.z << ")";
+	// tlog::info() << "mesh_bounding_box.max: (" << mesh_bounding_box.max.x << ", " << mesh_bounding_box.max.y << ", " << mesh_bounding_box.max.z << ")";
 	mesh_bounding_box.inflate(m_geometry.zero_offset);
+	
 	tracer.init_rays_from_camera_mesh(
 		render_buffer.spp,
 		render_buffer.resolution,
@@ -2206,52 +2220,123 @@ void Testbed::render_geometry_mesh(
 		stream
 	);
 
+	bool gt_raytrace = true;
+
 	auto trace = [&](MyTracer& tracer) {
 		return tracer.trace_mesh_bvh(m_geometry.geometry_mesh_bvh.get(), m_geometry.mesh_cpu.data(), stream);
 	};
 
-	uint32_t n_hit = trace(tracer);
-
-	RaysMeshSoa& rays_hit = tracer.rays_hit();
-
-	normals_function(n_hit, rays_hit.pos, rays_hit.normal, stream);
-
-	if ( n_hit > 0) {
-		// Shadow rays towards the sun
-		MyTracer shadow_tracer;
-		shadow_tracer.init_rays_from_data_mesh(n_hit, rays_hit, stream);
-		shadow_tracer.set_trace_shadow_rays(true);
-		shadow_tracer.set_shadow_sharpness(m_geometry.shadow_sharpness);
-		RaysMeshSoa& shadow_rays_init = shadow_tracer.rays_init();
-		linear_kernel(prepare_shadow_rays_geometry, 0, stream,
-			n_hit,
-			normalize(m_sun_dir),
-			shadow_rays_init.pos,
-			shadow_rays_init.normal,
-			shadow_rays_init.distance,
-			shadow_rays_init.prev_distance,
-			shadow_rays_init.total_distance,
-			shadow_rays_init.min_visibility,
-			shadow_rays_init.payload,
-			mesh_bounding_box
-		);
-		uint32_t n_hit_shadow = trace(shadow_tracer);
-		auto& shadow_rays_hit =  shadow_tracer.rays_init();
-		linear_kernel(write_shadow_ray_result_geometry, 0, stream,
-			n_hit_shadow,
-			mesh_bounding_box,
-			shadow_rays_hit.pos,
-			shadow_rays_hit.payload,
-			shadow_rays_hit.min_visibility,
-			rays_hit.distance
-		);
+	uint32_t n_hit;
+	if (m_render_mode == ERenderMode::Slice) {
+		n_hit = tracer.n_rays_initialized();
+	} else {
+		n_hit = trace(tracer);
 	}
+
+
+	RaysMeshSoa& rays_hit = m_render_mode == ERenderMode::Slice || gt_raytrace ? tracer.rays_init() : tracer.rays_hit();
+
+	// if (m_render_mode == ERenderMode::Slice) {
+	// 	if (visualized_dimension == -1) {
+	// 		distance_function(n_hit, rays_hit.pos, rays_hit.distance, stream);
+	// 		extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), N_THREADS_LINEAR, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance, CM, (float*)rays_hit.normal);
+	// 	} else {
+	// 		// Store colors in the normal buffer
+	// 		uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_GRANULARITY);
+
+	// 		GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
+	// 		GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
+	// 		m_network->visualize_activation(stream, m_visualized_layer, visualized_dimension, positions_matrix, colors_matrix);
+	// 	}
+	// }
+
+
+	ERenderMode render_mode = (visualized_dimension > -1 || m_render_mode == ERenderMode::Slice) ? ERenderMode::EncodingVis : m_render_mode;
+	if (render_mode == ERenderMode::Shade || render_mode == ERenderMode::Normals) {
+		normals_function(n_hit, rays_hit.pos, rays_hit.normal, stream);
+
+		if (render_mode == ERenderMode::Shade && n_hit > 0) {
+			// Shadow rays towards the sun
+			MyTracer shadow_tracer;
+
+			shadow_tracer.init_rays_from_data_mesh(n_hit, rays_hit, stream);
+			shadow_tracer.set_trace_shadow_rays(true);
+			shadow_tracer.set_shadow_sharpness(m_geometry.shadow_sharpness);
+			RaysMeshSoa& shadow_rays_init = shadow_tracer.rays_init();
+			linear_kernel(prepare_shadow_rays_geometry, 0, stream,
+				n_hit,
+				normalize(m_sun_dir),
+				shadow_rays_init.pos,
+				shadow_rays_init.normal,
+				shadow_rays_init.distance,
+				shadow_rays_init.prev_distance,
+				shadow_rays_init.total_distance,
+				shadow_rays_init.min_visibility,
+				shadow_rays_init.payload,
+				mesh_bounding_box
+			);
+
+			uint32_t n_hit_shadow = trace(shadow_tracer);
+			auto& shadow_rays_hit = gt_raytrace ? shadow_tracer.rays_init() : shadow_tracer.rays_hit();
+
+			linear_kernel(write_shadow_ray_result_geometry, 0, stream,
+				n_hit_shadow,
+				mesh_bounding_box,
+				shadow_rays_hit.pos,
+				shadow_rays_hit.payload,
+				shadow_rays_hit.min_visibility,
+				rays_hit.distance
+			);
+		}
+	} else if (render_mode == ERenderMode::EncodingVis && m_render_mode != ERenderMode::Slice) {
+		// HACK: Store colors temporarily in the normal buffer
+		uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_GRANULARITY);
+
+		GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
+		GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
+		m_network->visualize_activation(stream, m_visualized_layer, visualized_dimension, positions_matrix, colors_matrix);
+	}
+	
+
+	// this has a bug with write_shadow_ray_result_geometry
+	// fix it for the future
+
+	// if ( n_hit > 0) {
+	// 	// Shadow rays towards the sun
+	// 	MyTracer shadow_tracer;
+	// 	shadow_tracer.init_rays_from_data_mesh(n_hit, rays_hit, stream);
+	// 	shadow_tracer.set_trace_shadow_rays(true);
+	// 	shadow_tracer.set_shadow_sharpness(m_geometry.shadow_sharpness);
+	// 	RaysMeshSoa& shadow_rays_init = shadow_tracer.rays_init();
+	// 	linear_kernel(prepare_shadow_rays_geometry, 0, stream,
+	// 		n_hit,
+	// 		normalize(m_sun_dir),
+	// 		shadow_rays_init.pos,
+	// 		shadow_rays_init.normal,
+	// 		shadow_rays_init.distance,
+	// 		shadow_rays_init.prev_distance,
+	// 		shadow_rays_init.total_distance,
+	// 		shadow_rays_init.min_visibility,
+	// 		shadow_rays_init.payload,
+	// 		mesh_bounding_box
+	// 	);
+	// 	uint32_t n_hit_shadow = trace(shadow_tracer);
+	// 	auto& shadow_rays_hit =  shadow_tracer.rays_init();
+	// 	linear_kernel(write_shadow_ray_result_geometry, 0, stream,
+	// 		n_hit_shadow,
+	// 		mesh_bounding_box,
+	// 		shadow_rays_hit.pos,
+	// 		shadow_rays_hit.payload,
+	// 		shadow_rays_hit.min_visibility,
+	// 		rays_hit.distance
+	// 	);
+	// }
 
 	linear_kernel(shade_kernel_mesh_geometry, 0, stream,
 		n_hit,
-		m_aabb,
+		mesh_bounding_box,
 		get_floor_y(),
-		ERenderMode::Shade,
+		m_render_mode,
 		m_geometry.brdf,	//not sure how to handle brdf
 		normalize(m_sun_dir),
 		normalize(m_up_dir),
@@ -2264,6 +2349,17 @@ void Testbed::render_geometry_mesh(
 		render_buffer.depth_buffer
 	);
 
+	if (render_mode == ERenderMode::Cost) {
+		std::vector<GeometryPayload> payloads_final_cpu(n_hit);
+		CUDA_CHECK_THROW(cudaMemcpyAsync(payloads_final_cpu.data(), rays_hit.payload, n_hit * sizeof(SdfPayload), cudaMemcpyDeviceToHost, stream));
+		CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+		size_t total_n_steps = 0;
+		for (uint32_t i = 0; i < n_hit; ++i) {
+			total_n_steps += payloads_final_cpu[i].n_steps;
+		}
+
+		tlog::info() << "Total steps per hit= " << total_n_steps << "/" << n_hit << " = " << ((float)total_n_steps/(float)n_hit);
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
